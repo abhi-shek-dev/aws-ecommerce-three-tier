@@ -5,15 +5,15 @@ A production-style e-commerce application built on AWS.
 ## Planned Architecture
 
 CloudFront
-↓
+->
 External ALB
-↓
+->
 Web Tier (Nginx)
-↓
+->
 Internal ALB
-↓
+->
 App Tier (Flask)
-↓
+->
 RDS MySQL
 
 ## AWS Services
