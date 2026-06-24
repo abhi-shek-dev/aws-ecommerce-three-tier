@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AWS Store</title>
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+ 
+    <header class="navbar">
+        <h1>AWS Store</h1>
+
+        <nav>
+            <a href="index.html">Home</a>
+            <a href="products.html">Products</a>
+            <a href="cart.html">Cart</a>
+        </nav>
+    </header>
+
+    <main>
+
+        <h2>Featured Products</h2>
+
+        <div class="products-container">
+
+            <div class="product">
+                <h3>Laptop</h3>
+                <p>₹65,000</p>
+                <button onclick="addToCart('Laptop',65000)">
+                 Add To Cart
+                </button>
+            </div>
+
+            <div class="product">
+                <h3>Phone</h3>
+                <p>₹30,000</p>
+                 <button onclick="addToCart('Phone',30000)">
+                 Add To Cart
+                </button>
+            </div>
+
+            <div class="product">
+                <h3>Headphones</h3>
+                <p>₹5,000</p>
+                 <button onclick="addToCart('Headphones',5000)">
+                 Add To Cart
+                </button>
+            </div>
+
+
+        </div>
+
+    </main>
+    
+    <script src="js/cart.js"></script>
+
+</body>
+
+</html>
