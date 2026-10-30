@@ -1,61 +1,61 @@
-from flask import Flask
+import logging
+import os
+
+from flask import Flask, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 
-from routes.cart import add_to_cart
-from routes.cart import get_cart
+from routes.cart import bp as cart_bp
+from routes.orders import bp as orders_bp
+from routes.products import bp as products_bp
 
-from routes.products import get_products
-
-from routes.cart import remove_from_cart
-
-from routes.orders import checkout
-
-from routes.orders import get_orders
+logging.basicConfig(level=logging.INFO)
 
 
-app = Flask(__name__)
+def create_app():
+    app = Flask(__name__)
 
-CORS(app)
+    # In AWS the browser talks to Nginx on the same origin (/api), so CORS only matters locally.
+    origins = [
+        o.strip()
+        for o in os.environ.get(
+            "CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
+        ).split(",")
+        if o.strip()
+    ]
+    CORS(app, origins=origins)
+
+    app.register_blueprint(products_bp)
+    app.register_blueprint(cart_bp)
+    app.register_blueprint(orders_bp)
+
+    @app.get("/")
+    def home():
+        return "AWS E-Commerce Backend Running"
+
+    @app.get("/health")
+    def health():
+        # Used by the load balancer health checks. Deliberately does not touch the database.
+        return jsonify({"status": "ok"})
+
+    @app.errorhandler(HTTPException)
+    def handle_http_error(error):
+        return jsonify({"message": error.description}), error.code
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(error):
+        app.logger.exception("Unhandled error")
+        return jsonify({"message": "Internal server error"}), 500
+
+    return app
 
 
-@app.route("/")
-def home():
-    return "AWS E-Commerce Backend Running"
-
-
-@app.route("/products")
-def products():
-
-    return get_products()
-
-
-@app.route("/cart/add", methods=["POST"])
-def cart_add():
-    return add_to_cart()
-
-
-@app.route("/cart", methods=["GET"])
-def cart_view():
-    return get_cart()
-
-
-@app.route("/cart/remove/<int:index>",methods=["DELETE"])
-def cart_remove(index):
-    return remove_from_cart(index)  
-
-
-@app.route( "/checkout",methods=["POST"])
-def order_checkout():
-    return checkout()    
-
-
-@app.route("/orders")
-def orders():
-    return get_orders()    
+app = create_app()
 
 if __name__ == "__main__":
+    # Local development only. In AWS the app runs under gunicorn (see deploy/).
     app.run(
-        host="0.0.0.0",
-        port=5000,
-        debug=True
+        host=os.environ.get("HOST", "127.0.0.1"),
+        port=int(os.environ.get("PORT", "5000")),
+        debug=os.environ.get("FLASK_DEBUG") == "1",
     )

@@ -224,11 +224,26 @@ Response Returned To User
 
 ---
 
+## How the application maps onto the tiers
+
+| Tier | Runs | Notes |
+|---|---|---|
+| Web | Nginx on EC2 (Auto Scaling Group) | Serves `frontend/` and forwards `/api/*` to the internal ALB (`deploy/nginx.conf`) |
+| App | Flask under gunicorn on EC2 (Auto Scaling Group) | `deploy/ecommerce-backend.service`; ALB health check path `/health` |
+| Data | RDS MySQL | Schema in `database/schema.sql`; credentials from Secrets Manager (`DB_SECRET_ARN`) |
+
+The browser calls relative `/api/...` URLs, so CloudFront, the external ALB and Nginx handle everything on one origin and the API is never reachable from the internet directly.
+
+---
+
 ## Project Repository Structure
 
-frontend/
-backend/
-database/
-docs/
+```
+frontend/    static site
+backend/     Flask API
+database/    schema and sample data
+deploy/      Nginx config, systemd unit, env template
+docs/        this document
 README.md
 .gitignore
+```

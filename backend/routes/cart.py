@@ -1,97 +1,82 @@
-from flask import request, jsonify
+from flask import Blueprint, abort, jsonify, request
 
-from config import cursor, db
+from config import db_cursor
+from routes.common import get_client_id
 
-cart = []
+bp = Blueprint("cart", __name__)
+
+MAX_QUANTITY = 10
 
 
+@bp.get("/cart")
+def view_cart():
+    client_id = get_client_id()
+
+    with db_cursor() as cursor:
+        # The price always comes from the products table, never from the browser.
+        cursor.execute(
+            """
+            SELECT c.id, p.name, p.price, c.quantity
+            FROM cart c
+            JOIN products p ON p.id = c.product_id
+            WHERE c.client_id = %s
+            ORDER BY c.id
+            """,
+            (client_id,),
+        )
+        rows = cursor.fetchall()
+
+    return jsonify(
+        [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "price": float(r["price"]),
+                "quantity": r["quantity"],
+            }
+            for r in rows
+        ]
+    )
+
+
+@bp.post("/cart/add")
 def add_to_cart():
+    client_id = get_client_id()
+    data = request.get_json(silent=True) or {}
+    product_id = data.get("product_id")
 
-    data = request.json
+    if not isinstance(product_id, int) or isinstance(product_id, bool):
+        abort(400, description="product_id must be an integer")
 
-    cursor.execute(
-        """
-        SELECT *
-        FROM cart
-        WHERE product_name = %s
-        """,
-        (data["name"],)
-    )
+    with db_cursor() as cursor:
+        cursor.execute("SELECT id FROM products WHERE id = %s", (product_id,))
+        if cursor.fetchone() is None:
+            abort(404, description="Product not found")
 
-    existing_item = cursor.fetchone()
-
-    if existing_item:
-
+        # Atomic upsert: no read-then-write race when two clicks arrive together.
         cursor.execute(
             """
-            UPDATE cart
-            SET quantity = quantity + 1
-            WHERE product_name = %s
+            INSERT INTO cart (client_id, product_id, quantity)
+            VALUES (%s, %s, 1)
+            ON DUPLICATE KEY UPDATE quantity = LEAST(quantity + 1, %s)
             """,
-            (data["name"],)
+            (client_id, product_id, MAX_QUANTITY),
         )
 
-    else:
+    return jsonify({"message": "Item added"})
 
+
+@bp.delete("/cart/remove/<int:item_id>")
+def remove_from_cart(item_id):
+    client_id = get_client_id()
+
+    with db_cursor() as cursor:
+        # Scoped to the caller's own cart, so one visitor cannot delete another's items.
         cursor.execute(
-            """
-            INSERT INTO cart
-            (
-                product_name,
-                price,
-                quantity
-            )
-            VALUES
-            (
-                %s,
-                %s,
-                %s
-            )
-            """,
-            (
-                data["name"],
-                data["price"],
-                1
-            )
+            "DELETE FROM cart WHERE id = %s AND client_id = %s",
+            (item_id, client_id),
         )
+        if cursor.rowcount == 0:
+            abort(404, description="Item not found in your cart")
 
-    db.commit()
-
-    return jsonify(
-        {
-            "message": "Item added"
-        }
-    )
-
-
-def get_cart():
-
-    cursor.execute(
-        """
-        SELECT *
-        FROM cart
-        """
-    )
-
-    cart_items = cursor.fetchall()
-
-    return jsonify(cart_items)
-
-
-def remove_from_cart(index):
-
-    cursor.execute(
-        """
-        DELETE FROM cart
-        WHERE id = %s
-        """,
-        (index,)
-    )
-
-    db.commit()
-
-    return jsonify(
-        {
-            "message": "Item removed"
-        }
-    )
+    return jsonify({"message": "Item removed"})

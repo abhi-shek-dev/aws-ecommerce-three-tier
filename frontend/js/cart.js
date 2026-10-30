@@ -1,128 +1,66 @@
-async function addToCart(name, price) {
-
-    const response =
-        await fetch(
-            "http://localhost:5000/cart/add",
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
-
-                body: JSON.stringify({
-                    name: name,
-                    price: price
-                })
-            }
-        );
-
-    const result =
-        await response.json();
-
-    alert(result.message);
+async function addToCart(productId) {
+    try {
+        const result = await api("/cart/add", {
+            method: "POST",
+            body: JSON.stringify({ product_id: productId }),
+        });
+        alert(result.message);
+    } catch (error) {
+        alert(error.message);
+    }
 }
 
-async function removeFromCart(index) {
-
-    await fetch(
-        `http://localhost:5000/cart/remove/${index}`,
-        {
-            method: "DELETE"
-        }
-    );
-
-    loadCart();
+async function removeFromCart(itemId) {
+    try {
+        await api(`/cart/remove/${itemId}`, { method: "DELETE" });
+        await loadCart();
+    } catch (error) {
+        alert(error.message);
+    }
 }
-
 
 async function loadCart() {
+    const cartDiv = document.getElementById("cart-items");
+    if (!cartDiv) return; // not the cart page
 
-    const response =
-        await fetch(
-            "http://localhost:5000/cart"
-        );
+    try {
+        const cart = await api("/cart");
 
-    const cart =
-        await response.json();
+        if (cart.length === 0) {
+            cartDiv.innerHTML = "<h3>Your cart is empty</h3>";
+            return;
+        }
 
-    let cartDiv =
-        document.getElementById(
-            "cart-items"
-        );
+        let total = 0;
+        let html = "";
 
-    if (!cartDiv) return;
+        cart.forEach((item) => {
+            total += item.price * item.quantity;
+            html += `
+                <div class="product">
+                    <h3>${escapeHtml(item.name)}</h3>
+                    <p>Price: ${formatPrice(item.price)}</p>
+                    <p>Quantity: ${Number(item.quantity)}</p>
+                    <button onclick="removeFromCart(${Number(item.id)})">Remove</button>
+                </div>
+            `;
+        });
 
-    if (cart.length === 0) {
-
-        cartDiv.innerHTML =
-            "<h3>Your cart is empty</h3>";
-
-        return;
+        html += `<h2>Total: ${formatPrice(total)}</h2>`;
+        cartDiv.innerHTML = html;
+    } catch (error) {
+        cartDiv.textContent = "Could not load your cart. Please try again.";
     }
-
-    let html = "";
-
-    let total = 0;
-
-    cart.forEach((item, index) => {
-
-        html += `
-            <div class="product">
-
-                <h3>${item.name}</h3>
-
-                <p>
-                    Price: ₹${item.price}
-                </p>
-
-                <p>
-                    Quantity:
-                    ${item.quantity}
-                </p>
-
-                <button
-                    onclick="removeFromCart(${index})">
-                    Remove
-                </button>
-
-            </div>
-        `;
-
-        total +=
-            item.price *
-            item.quantity;
-    });
-
-    html += `
-        <h2>
-            Total: ₹${total}
-        </h2>
-    `;
-
-    cartDiv.innerHTML = html;
 }
-window.onload = loadCart;
-
 
 async function checkout() {
-
-    const response =
-        await fetch(
-            "http://localhost:5000/checkout",
-            {
-                method: "POST"
-            }
-        );
-
-    const result =
-        await response.json();
-
-    alert(
-        `${result.message}
-Total: ₹${result.total}`
-    );
-
-    loadCart();
+    try {
+        const result = await api("/checkout", { method: "POST" });
+        alert(`${result.message}\nTotal: ${formatPrice(result.total)}`);
+        await loadCart();
+    } catch (error) {
+        alert(error.message);
+    }
 }
+
+document.addEventListener("DOMContentLoaded", loadCart);

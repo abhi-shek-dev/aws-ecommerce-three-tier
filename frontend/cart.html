@@ -1,41 +1,33 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cart</title>
-
     <link rel="stylesheet" href="css/style.css">
-
 </head>
-
 <body>
 
-<header class="navbar">
+    <header class="navbar">
+        <h1>AWS Store</h1>
 
-    <h1>AWS Store</h1>
+        <nav>
+            <a href="index.html">Home</a>
+            <a href="products.html">Products</a>
+            <a href="cart.html">Cart</a>
+        </nav>
+    </header>
 
-    <nav>
-        <a href="index.html">Home</a>
-        <a href="products.html">Products</a>
-        <a href="cart.html">Cart</a>
-    </nav>
+    <main>
+        <h2>Your Cart</h2>
 
-</header>
+        <div id="cart-items"></div>
 
-<main>
+        <button onclick="checkout()">Checkout</button>
+    </main>
 
-    <h2>Your Cart</h2>
-
-    <div id="cart-items"></div>
-
-    <button onclick="checkout()">
-    Checkout
-    </button>
-
-</main>
-
-<script src="js/cart.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/cart.js"></script>
 
 </body>
 </html>
