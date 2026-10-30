@@ -1,42 +1,33 @@
-# AWS Three-Tier Highly Available E-Commerce Platform
+# Architecture
 
-## Architecture Overview
+AWS three-tier, highly available e-commerce platform: a static web tier (Nginx), an API tier (Flask) and a managed database (RDS MySQL), spread across two Availability Zones behind CloudFront and two load balancers.
 
-This project implements a production-style, highly available three-tier e-commerce application on AWS.
+## Overview
 
-The infrastructure is deployed across multiple Availability Zones to eliminate single points of failure and provide scalability, security, and fault tolerance.
+```mermaid
+flowchart TB
+    Users([Internet users]) --> CF[CloudFront]
+    subgraph VPC["VPC 10.0.0.0/16 - two Availability Zones"]
+        EALB[External ALB] --> WEB["Web tier: Nginx<br/>Auto Scaling Group"]
+        WEB --> IALB[Internal ALB]
+        IALB --> APP["App tier: Flask<br/>Auto Scaling Group"]
+        APP --> DB[("RDS MySQL<br/>primary and standby")]
+    end
+    CF --> EALB
+```
 
----
+## Request flow
 
-## High-Level Architecture
+1. A user requests the site. **CloudFront** serves it from the nearest edge location and forwards requests it can't answer.
+2. The **external ALB** (public subnets) spreads traffic across the web servers.
+3. **Nginx** (private web subnets) serves the static pages and forwards `/api/*` calls to the internal ALB.
+4. The **internal ALB** spreads API traffic across the application servers.
+5. **Flask** (private app subnets) runs the business logic and queries the database.
+6. **RDS MySQL** (private DB subnets) stores products, carts and orders. The response travels back along the same path.
 
-Internet Users
-      │
-      ▼
-CloudFront Distribution
-      │
-      ▼
-Internet-Facing Application Load Balancer (External ALB)
-      │
-      ▼
-Auto Scaling Group - Web Tier (Nginx)
-      │
-      ▼
-Internal Application Load Balancer
-      │
-      ▼
-Auto Scaling Group - Application Tier (Flask)
-      │
-      ▼
-Amazon RDS MySQL (Multi-AZ)
-      │
-      ▼
-Persistent Application Data
+## Network layout
 
----
-
-## Network Architecture
-
+```text
 AWS Region
 │
 └── VPC (10.0.0.0/16)
@@ -61,7 +52,6 @@ AWS Region
         │
         ├── Public Subnet B
         │   ├── NAT Gateway B
-        │   │
         │   └── External ALB
         │
         ├── Private Web Subnet B
@@ -72,173 +62,70 @@ AWS Region
         │
         └── Private DB Subnet B
             └── RDS MySQL Standby
+```
 
----
+## Security design
 
-## AWS Services Used
+| Layer | Who can reach it | How |
+|---|---|---|
+| CloudFront and external ALB | The internet | The only public entry points |
+| Web tier | External ALB only | Security group allows traffic only from the ALB |
+| Internal ALB | Web tier only | Not internet-facing |
+| App tier | Internal ALB only | Private subnets, no public IPs |
+| Database | App tier only | Private DB subnets; security group allows the database port only from the app servers |
 
-### Networking
-- Amazon VPC
-- Internet Gateway
-- NAT Gateway
-- Route Tables
-- Network Segmentation
+Application servers cannot be reached directly from the internet. Administrative access goes through the bastion host or SSM Session Manager.
 
-### Compute
-- Amazon EC2
-- Launch Templates
-- Auto Scaling Groups
+## IAM roles
 
-### Load Balancing
-- External Application Load Balancer
-- Internal Application Load Balancer
+| Role | Permissions |
+|---|---|
+| `EC2-WebServer-Role` | CloudWatch Logs, SSM Session Manager, read-only access to application assets |
+| `EC2-AppServer-Role` | CloudWatch Logs, Secrets Manager (database credentials), RDS connectivity |
+| CloudFront | Access to the application content origins |
 
-### Security
-- IAM Roles
-- Security Groups
-- Least Privilege Access Model
+Each tier gets its own role with only the permissions it needs (least privilege).
 
-### Database
-- Amazon RDS MySQL
-- Multi-AZ Deployment
+## High availability
 
-### Content Delivery
-- Amazon CloudFront
+- Two Availability Zones for every tier, so one AZ failing doesn't take the site down
+- Auto Scaling Groups replace unhealthy web and app servers automatically
+- Two load balancers with health checks (the API exposes `/health`)
+- RDS Multi-AZ: automatic failover to the standby database
+- CloudFront edge locations in front of the whole stack
 
-### Monitoring
-- Amazon CloudWatch
-- CloudWatch Logs
+## Scaling strategy
 
-### Source Control
-- Git
-- GitHub
+| Tier | Scale out | Scale in |
+|---|---|---|
+| Web (Nginx) | Average CPU above 70% | Average CPU below 30% |
+| App (Flask) | Request count per target rises | Low utilisation |
 
----
+## AWS services used
 
-## Security Design
-
-### Public Access
-
-Internet
-    ↓
-CloudFront
-    ↓
-External ALB
-
-Only CloudFront and the External ALB are publicly accessible.
-
-### Application Isolation
-
-External ALB
-    ↓
-Web Tier
-
-Web Tier
-    ↓
-Internal ALB
-
-Internal ALB
-    ↓
-Application Tier
-
-Application servers are deployed in private subnets and cannot be accessed directly from the internet.
-
-### Database Protection
-
-Application Tier
-    ↓
-RDS MySQL
-
-Database servers reside in private database subnets and accept traffic only from application servers.
-
----
-
-## IAM Roles
-
-### EC2-WebServer-Role
-
-Permissions:
-- CloudWatch Logs
-- SSM Session Manager
-- Read-only access to application assets
-
-### EC2-AppServer-Role
-
-Permissions:
-- RDS connectivity
-- CloudWatch Logs
-- Secrets Manager access
-
-### CloudFront
-
-Permissions:
-- Access to application content origins
-
----
-
-## High Availability Features
-
-- Multi-AZ deployment
-- Auto Scaling Groups
-- Multiple application servers
-- Multiple web servers
-- Application Load Balancers
-- RDS Multi-AZ failover
-- CloudFront global edge locations
-
----
-
-## Scaling Strategy
-
-### Web Tier
-
-Auto Scaling Policy:
-- Scale Out: CPU > 70%
-- Scale In: CPU < 30%
-
-### Application Tier
-
-Auto Scaling Policy:
-- Scale Out: Request count increases
-- Scale In: Low utilization
-
----
-
-## Application Flow
-
-User Request
-    ↓
-CloudFront
-    ↓
-External ALB
-    ↓
-Nginx Web Server
-    ↓
-Internal ALB
-    ↓
-Flask API Server
-    ↓
-RDS MySQL
-    ↓
-Response Returned To User
-
----
+| Area | Services |
+|---|---|
+| Networking | VPC, Internet Gateway, NAT Gateway, route tables, subnets and security groups |
+| Compute | EC2, launch templates, Auto Scaling Groups |
+| Load balancing | External and internal Application Load Balancers |
+| Database | RDS MySQL (Multi-AZ) |
+| Content delivery | CloudFront |
+| Security | IAM roles, security groups, Secrets Manager |
+| Monitoring | CloudWatch metrics and logs |
 
 ## How the application maps onto the tiers
 
 | Tier | Runs | Notes |
 |---|---|---|
 | Web | Nginx on EC2 (Auto Scaling Group) | Serves `frontend/` and forwards `/api/*` to the internal ALB (`deploy/nginx.conf`) |
-| App | Flask under gunicorn on EC2 (Auto Scaling Group) | `deploy/ecommerce-backend.service`; ALB health check path `/health` |
+| App | Flask under gunicorn on EC2 (Auto Scaling Group) | `deploy/ecommerce-backend.service`; load balancer health check path `/health` |
 | Data | RDS MySQL | Schema in `database/schema.sql`; credentials from Secrets Manager (`DB_SECRET_ARN`) |
 
 The browser calls relative `/api/...` URLs, so CloudFront, the external ALB and Nginx handle everything on one origin and the API is never reachable from the internet directly.
 
----
+## Repository structure
 
-## Project Repository Structure
-
-```
+```text
 frontend/    static site
 backend/     Flask API
 database/    schema and sample data
